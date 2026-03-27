@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Вход — Админ-панель VK Link Rewriter</title>
+  <style>
+    :root {
+      --bg: #0f0f12;
+      --card: #16161b;
+      --input: #1c1c23;
+      --border: #2a2a34;
+      --blue: #2787f5;
+      --blue-dim: rgba(39, 135, 245, 0.15);
+      --text: #e4e4e7;
+      --muted: #a1a1aa;
+      --error: #ef4444;
+      --radius: 12px;
+      --radius-sm: 8px;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--text);
+      font-family: system-ui, -apple-system, sans-serif;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem;
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 2rem;
+      width: 100%;
+      max-width: 360px;
+    }
+    h1 { font-size: 1.25rem; margin: 0 0 1.5rem 0; }
+    .field { margin-bottom: 1rem; }
+    .field label { display: block; font-size: 0.8rem; color: var(--muted); margin-bottom: 0.35rem; }
+    input {
+      width: 100%;
+      background: var(--input);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 0.6rem 0.75rem;
+      color: var(--text);
+      font-size: 0.95rem;
+    }
+    input:focus {
+      outline: none;
+      border-color: var(--blue);
+      box-shadow: 0 0 0 3px var(--blue-dim);
+    }
+    .err {
+      background: rgba(239, 68, 68, 0.12);
+      color: var(--error);
+      padding: 0.5rem 0.75rem;
+      border-radius: var(--radius-sm);
+      margin-bottom: 1rem;
+      font-size: 0.9rem;
+    }
+    button {
+      width: 100%;
+      padding: 0.6rem 1.25rem;
+      border-radius: var(--radius-sm);
+      font-weight: 500;
+      font-size: 0.95rem;
+      cursor: pointer;
+      border: none;
+      background: var(--blue);
+      color: #fff;
+      font-family: inherit;
+    }
+    button:hover { filter: brightness(1.1); }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Админ-панель</h1>
+    <form method="post" action="{{ url_for('admin_login') }}">
+      <div class="field">
+        <label for="password">Пароль</label>
+        <input id="password" name="password" type="password" autocomplete="current-password" required autofocus>
+      </div>
+      <div id="err" class="err" style="display:none;"></div>
+      <button type="submit">Войти</button>
+    </form>
+  </div>
+</body>
+</html>

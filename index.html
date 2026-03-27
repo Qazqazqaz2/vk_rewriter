@@ -1,0 +1,711 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>VK Link Rewriter</title>
+    <style>
+        :root {
+            color-scheme: dark light;
+            --bg: #0b1120;
+            --bg-card: #020617;
+            --bg-input: #020617;
+            --border: #1e293b;
+            --accent: #3b82f6;
+            --accent-soft: rgba(59, 130, 246, 0.14);
+            --text: #e5e7eb;
+            --muted: #9ca3af;
+            --danger: #f97373;
+            --success: #4ade80;
+        }
+
+        *,
+        *::before,
+        *::after {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            background: radial-gradient(circle at top, #1f2937 0, #020617 42%, #000 100%);
+            color: var(--text);
+        }
+
+        .app {
+            width: 100%;
+            max-width: 960px;
+        }
+
+        .card {
+            background: radial-gradient(circle at top left, rgba(59, 130, 246, 0.18), transparent 55%),
+                        radial-gradient(circle at bottom right, rgba(16, 185, 129, 0.18), transparent 50%),
+                        var(--bg-card);
+            border-radius: 24px;
+            padding: 24px 24px 18px;
+            border: 1px solid rgba(148, 163, 184, 0.24);
+            box-shadow:
+                0 22px 45px rgba(15, 23, 42, 0.9),
+                0 0 0 1px rgba(15, 23, 42, 0.7);
+            backdrop-filter: blur(18px);
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 20px;
+        }
+
+        .title-block h1 {
+            margin: 0 0 4px;
+            font-size: 22px;
+            letter-spacing: 0.02em;
+        }
+
+        .title-block p {
+            margin: 0;
+            font-size: 13px;
+            color: var(--muted);
+        }
+
+        .vk-status {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 10px;
+            border-radius: 999px;
+            background: rgba(15, 23, 42, 0.75);
+            border: 1px solid rgba(148, 163, 184, 0.35);
+            font-size: 12px;
+            color: var(--muted);
+            white-space: nowrap;
+        }
+
+        .vk-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 999px;
+            background: var(--danger);
+            box-shadow: 0 0 0 4px rgba(248, 113, 113, 0.16);
+        }
+
+        .vk-dot.online {
+            background: var(--success);
+            box-shadow: 0 0 0 4px rgba(74, 222, 128, 0.2);
+        }
+
+        .form-grid {
+            display: grid;
+            grid-template-columns: 1.2fr 1.3fr;
+            gap: 18px;
+        }
+
+        @media (max-width: 800px) {
+            .form-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .field-group {
+            margin-bottom: 12px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 6px;
+            font-size: 13px;
+            color: var(--muted);
+        }
+
+        .input,
+        .textarea {
+            width: 100%;
+            padding: 9px 10px;
+            border-radius: 10px;
+            border: 1px solid var(--border);
+            background: rgba(15, 23, 42, 0.9);
+            color: var(--text);
+            font-size: 13px;
+            outline: none;
+            transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+            resize: none;
+        }
+
+        .input::placeholder,
+        .textarea::placeholder {
+            color: rgba(148, 163, 184, 0.55);
+        }
+
+        .input:focus,
+        .textarea:focus {
+            border-color: rgba(59, 130, 246, 0.85);
+            box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.35);
+            background: rgba(15, 23, 42, 0.98);
+        }
+
+        .textarea {
+            min-height: 120px;
+            line-height: 1.45;
+        }
+
+        .hint {
+            margin-top: 4px;
+            font-size: 11px;
+            color: rgba(148, 163, 184, 0.9);
+        }
+
+        .btn-row {
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+            gap: 10px;
+            margin-top: 4px;
+            margin-bottom: 10px;
+        }
+
+        .btn {
+            border: none;
+            border-radius: 999px;
+            padding: 7px 16px;
+            font-size: 13px;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            transition: background 0.15s ease, box-shadow 0.15s ease, transform 0.05s ease, opacity 0.15s ease;
+        }
+
+        .btn:disabled {
+            cursor: default;
+            opacity: 0.55;
+            box-shadow: none;
+            transform: none;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #3b82f6, #2563eb);
+            color: #e5e7eb;
+            box-shadow:
+                0 18px 30px rgba(37, 99, 235, 0.55),
+                0 0 0 1px rgba(37, 99, 235, 0.55);
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            background: linear-gradient(135deg, #4f46e5, #2563eb);
+            transform: translateY(-1px);
+        }
+
+        .btn-ghost {
+            background: rgba(15, 23, 42, 0.9);
+            color: var(--muted);
+            border: 1px solid rgba(148, 163, 184, 0.45);
+        }
+
+        .btn-ghost:hover:not(:disabled) {
+            background: rgba(15, 23, 42, 1);
+        }
+
+        .btn-danger {
+            background: rgba(248, 113, 113, 0.1);
+            color: #fecaca;
+            border: 1px solid rgba(248, 113, 113, 0.6);
+        }
+
+        .btn-danger:hover:not(:disabled) {
+            background: rgba(248, 113, 113, 0.18);
+        }
+
+        .log {
+            margin-top: 12px;
+            padding: 10px 12px;
+            border-radius: 14px;
+            background: radial-gradient(circle at top left, rgba(30, 64, 175, 0.45), transparent 60%),
+                        rgba(15, 23, 42, 0.98);
+            border: 1px solid rgba(30, 64, 175, 0.7);
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New",
+                monospace;
+            font-size: 12px;
+            max-height: 260px;
+            overflow: auto;
+            white-space: pre-wrap;
+            line-height: 1.45;
+        }
+
+        .log-title-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 6px;
+        }
+
+        .log-title {
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+            color: rgba(191, 219, 254, 0.9);
+        }
+
+        .log-content {
+            border-top: 1px dashed rgba(148, 163, 184, 0.4);
+            padding-top: 6px;
+        }
+
+        .pill {
+            padding: 2px 8px;
+            border-radius: 999px;
+            background: rgba(15, 23, 42, 0.85);
+            border: 1px solid rgba(148, 163, 184, 0.4);
+            font-size: 11px;
+            color: rgba(209, 213, 219, 0.9);
+        }
+
+        .error-text {
+            color: #fecaca;
+        }
+
+        .success-text {
+            color: #bbf7d0;
+        }
+
+        a.token-link {
+            color: #93c5fd;
+            text-decoration: none;
+        }
+
+        a.token-link:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="app">
+        <div class="card">
+            <div class="card-header">
+                <div class="title-block">
+                    <h1>VK Link Rewriter</h1>
+                    <p>Массовая замена ссылок в своих пабликах ВК (standalone web).</p>
+                </div>
+                <div class="vk-status" id="vk-status">
+                    <span class="vk-dot" id="vk-dot"></span>
+                    <span id="vk-status-text">Токен не указан</span>
+                </div>
+            </div>
+
+            <div class="form-grid">
+                <div>
+                    <div class="field-group">
+                        <label for="old-link">Старая ссылка (что искать)</label>
+                        <input id="old-link" class="input" type="text" placeholder="https://example.com/old"
+                        />
+                    </div>
+                    <div class="field-group">
+                        <label for="new-link">Новая ссылка (на что заменить)</label>
+                        <input id="new-link" class="input" type="text" placeholder="https://example.com/new"
+                        />
+                    </div>
+                    <div class="field-group">
+                        <label for="communities">Паблики / сообщества</label>
+                        <textarea
+                            id="communities"
+                            class="textarea"
+                            placeholder="https://vk.com/public123&#10;https://vk.com/club456&#10;my_community_name"
+                        ></textarea>
+                        <div class="hint">
+                            По одному сообществу в строку: ссылки (<code>https://vk.com/...</code>),
+                            <code>public123</code>, <code>club123</code> или короткое имя.
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <div class="field-group">
+                        <label for="access-token">Токен доступа пользователя</label>
+                        <input
+                            id="access-token"
+                            class="input"
+                            type="text"
+                            placeholder="VK1.a1b2c3... (access_token из адресной строки после авторизации)"
+                        />
+                        <div class="hint" id="token-hint">
+                            1. Нажмите «Получить токен» — откроется официальное окно авторизации ВК.<br />
+                            2. После выдачи прав скопируйте значение <code>access_token=...</code> из адресной строки<br />
+                            3. Вставьте этот токен в поле выше.
+                        </div>
+                        <div class="hint" style="margin-top: 6px;">
+                            Убедитесь, что у токена есть права:
+                            <span class="pill">wall</span>
+                            <span class="pill">groups</span>
+                            <span class="pill">offline</span>
+                        </div>
+                    </div>
+                    <div class="field-group">
+                        <label>Управление</label>
+                        <div class="btn-row">
+                            <button class="btn btn-ghost" id="get-token-btn">Получить токен</button>
+                            <button class="btn btn-primary" id="start-btn" disabled>Запустить замену</button>
+                            <button class="btn btn-danger" id="stop-btn" disabled>Остановить</button>
+                        </div>
+                        <div class="hint">
+                            После того как токен вставлен, можно запускать замену ссылок.
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="log">
+                <div class="log-title-row">
+                    <span class="log-title">Лог выполнения</span>
+                    <button class="btn btn-ghost" id="clear-log-btn" style="padding: 2px 10px; font-size: 11px;">
+                        Очистить
+                    </button>
+                </div>
+                <div id="log-content" class="log-content"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // TODO: Замените на ID вашего standalone web-приложения ВКонтакте
+        const VK_APP_ID = 54457464; // <= ВАЖНО: укажите сюда свой apiId
+        const API_VERSION = "5.199";
+
+        const logEl = document.getElementById("log-content");
+        const vkStatusText = document.getElementById("vk-status-text");
+        const vkDot = document.getElementById("vk-dot");
+        const accessTokenInput = document.getElementById("access-token");
+        const getTokenBtn = document.getElementById("get-token-btn");
+        const startBtn = document.getElementById("start-btn");
+        const stopBtn = document.getElementById("stop-btn");
+        const clearLogBtn = document.getElementById("clear-log-btn");
+
+        const oldLinkInput = document.getElementById("old-link");
+        const newLinkInput = document.getElementById("new-link");
+        const communitiesInput = document.getElementById("communities");
+
+        let isStopping = false;
+
+        function appendLog(message, opts = {}) {
+            const time = new Date().toLocaleTimeString("ru-RU", { hour12: false });
+            const line = document.createElement("div");
+            if (opts.type === "error") {
+                line.classList.add("error-text");
+            } else if (opts.type === "success") {
+                line.classList.add("success-text");
+            }
+            line.textContent = `[${time}] ${message}`;
+            logEl.appendChild(line);
+            logEl.scrollTop = logEl.scrollHeight;
+        }
+
+        function updateTokenStatus() {
+            const hasToken = !!accessTokenInput.value.trim();
+            if (hasToken) {
+                vkStatusText.textContent = "Токен указан";
+                vkDot.classList.add("online");
+                startBtn.disabled = false;
+            } else {
+                vkStatusText.textContent = "Токен не указан";
+                vkDot.classList.remove("online");
+                startBtn.disabled = true;
+            }
+        }
+
+        function vkApi(method, params = {}, delayMs = 340) {
+            const token = accessTokenInput.value.trim();
+            if (!token) {
+                return Promise.reject({ error_code: -1, error_msg: "Не указан access_token" });
+            }
+
+            const url = `https://api.vk.com/method/${method}`;
+            const body = new URLSearchParams({
+                ...params,
+                access_token: token,
+                v: API_VERSION,
+            });
+
+            return fetch(url, {
+                method: "POST",
+                body,
+            })
+                .then((r) => r.json())
+                .then((data) => {
+                    if (data.error) {
+                        throw data.error;
+                    }
+                    return data.response;
+                })
+                .then((result) => {
+                    return new Promise((resolve) => setTimeout(() => resolve(result), delayMs));
+                });
+        }
+
+        async function resolveOwnerId(raw) {
+            let s = (raw || "").trim();
+            if (!s) return null;
+
+            try {
+                if (s.startsWith("http://") || s.startsWith("https://")) {
+                    const url = new URL(s);
+                    s = url.pathname.replace(/^\//, "");
+                }
+            } catch (_) {
+                // ignore URL parse errors; treat as plain string
+            }
+
+            if (/^(club|public|event)\d+$/i.test(s)) {
+                const digits = s.replace(/^(club|public|event)/i, "");
+                const id = parseInt(digits, 10);
+                return isNaN(id) ? null : -id;
+            }
+
+            if (/^id\d+$/i.test(s)) {
+                const id = parseInt(s.slice(2), 10);
+                return isNaN(id) ? null : id;
+            }
+
+            try {
+                const resp = await vkApi("utils.resolveScreenName", { screen_name: s });
+                if (resp && resp.type && (resp.type === "group" || resp.type === "page" || resp.type === "event")) {
+                    return -resp.object_id;
+                }
+                appendLog(`Не удалось определить ID для "${raw}"`, { type: "error" });
+                return null;
+            } catch (err) {
+                appendLog(`Ошибка при resolveScreenName для "${raw}": [${err.error_code}] ${err.error_msg}`, {
+                    type: "error",
+                });
+                return null;
+            }
+        }
+
+        function replaceInText(text, oldStr, newStr) {
+            if (!text || !oldStr) return text;
+            return text.split(oldStr).join(newStr);
+        }
+
+        async function processCommentsForPost(ownerId, postId, oldLink, newLink) {
+            let offset = 0;
+            let editedCount = 0;
+            const batchSize = 100;
+
+            while (!isStopping) {
+                let resp;
+                try {
+                    resp = await vkApi("wall.getComments", {
+                        owner_id: ownerId,
+                        post_id: postId,
+                        count: batchSize,
+                        offset,
+                        need_likes: 0,
+                    });
+                } catch (err) {
+                    appendLog(
+                        `Не удалось получить комментарии к посту ${postId}: [${err.error_code}] ${err.error_msg}`,
+                        { type: "error" },
+                    );
+                    break;
+                }
+
+                const items = (resp && resp.items) || [];
+                if (!items.length) break;
+
+                for (const comment of items) {
+                    if (isStopping) break;
+                    const commentId = comment.id;
+                    const text = comment.text || "";
+                    if (!text.includes(oldLink)) continue;
+
+                    const newText = replaceInText(text, oldLink, newLink);
+                    if (newText === text) continue;
+
+                    const attachments = comment.attachments || [];
+                    let attachStr = "";
+                    if (attachments && attachments.length) {
+                        attachStr = attachments
+                            .map((a) => `${a.type}${a[a.type].owner_id}_${a[a.type].id}`)
+                            .join(",");
+                    }
+
+                    appendLog(`Редактируем комментарий ${commentId}...`);
+                    try {
+                        await vkApi("wall.editComment", {
+                            owner_id: ownerId,
+                            comment_id: commentId,
+                            message: newText,
+                            attachments: attachStr || undefined,
+                        });
+                        editedCount++;
+                    } catch (err) {
+                        appendLog(
+                            `Ошибка редактирования комментария ${commentId}: [${err.error_code}] ${err.error_msg}`,
+                            { type: "error" },
+                        );
+                    }
+                }
+
+                if (items.length < batchSize) break;
+                offset += batchSize;
+            }
+
+            if (editedCount > 0) {
+                appendLog(`Комментариев отредактировано: ${editedCount}`, { type: "success" });
+            }
+        }
+
+        async function processCommunity(community, oldLink, newLink) {
+            if (isStopping) return;
+
+            const ownerId = await resolveOwnerId(community);
+            if (ownerId == null) {
+                appendLog(`Пропускаем "${community}": не удалось определить ID.`, { type: "error" });
+                return;
+            }
+
+            appendLog(`Обрабатываем сообщество ID = ${ownerId} (${community})`, { type: "success" });
+
+            let offset = 0;
+            let totalEditedPosts = 0;
+            const batchSize = 100;
+
+            while (!isStopping) {
+                let resp;
+                try {
+                    resp = await vkApi("wall.search", {
+                        owner_id: ownerId,
+                        query: oldLink,
+                        count: batchSize,
+                        offset,
+                    });
+                } catch (err) {
+                    // Корректное извлечение информации об ошибке
+                    const errorCode = err.error_code || err.code || 'неизвестный код';
+                    const errorMsg = err.error_msg || err.message || JSON.stringify(err);
+                    appendLog(
+                        `Ошибка при поиске постов в ${ownerId}: [${errorCode}] ${errorMsg}`,
+                        { type: "error" }
+                    );
+                    break;
+                }
+            
+                // Проверяем, что ответ содержит поле items (и оно вообще есть)
+                if (!resp || typeof resp !== 'object' || !Array.isArray(resp.items)) {
+                    appendLog(`Неожиданный ответ от wall.search для ${ownerId}: ${JSON.stringify(resp)}`, { type: "error" });
+                    break;
+                }
+            
+                const items = resp.items;
+                if (items.length === 0) {
+                    appendLog(`В сообществе ${ownerId} нет постов, содержащих "${oldLink}" (или постов вообще нет).`);
+                    break;
+                }
+            
+                for (const post of items) {
+                    if (isStopping) break;
+                    // ... остальная логика обработки поста (без изменений)
+                }
+            
+                if (items.length < batchSize) break;
+                offset += batchSize;
+            }
+            appendLog(`Всего отредактировано постов: ${totalEditedPosts}`, { type: "success" });
+        }
+
+        async function startProcessing() {
+            const oldLink = oldLinkInput.value.trim();
+            const newLink = newLinkInput.value.trim();
+            const communities = communitiesInput.value
+                .split(/\\r?\\n/)
+                .map((s) => s.trim())
+                .filter(Boolean);
+
+            if (!oldLink || !newLink) {
+                appendLog("Старая и новая ссылки не должны быть пустыми.", { type: "error" });
+                return;
+            }
+
+            if (!communities.length) {
+                appendLog("Укажите хотя бы одно сообщество.", { type: "error" });
+                return;
+            }
+
+            isStopping = false;
+            startBtn.disabled = true;
+            stopBtn.disabled = false;
+
+            appendLog("Начало обработки...", { type: "success" });
+
+            for (const comm of communities) {
+                if (isStopping) break;
+                await processCommunity(comm, oldLink, newLink);
+            }
+
+            if (isStopping) {
+                appendLog("Операция остановлена пользователем.", { type: "error" });
+            } else {
+                appendLog("Работа завершена.", { type: "success" });
+            }
+
+            updateTokenStatus();
+            stopBtn.disabled = true;
+            isStopping = false;
+        }
+
+        function stopProcessing() {
+            if (!isStopping) {
+                isStopping = true;
+                stopBtn.disabled = true;
+            }
+        }
+
+        function openTokenPage() {
+            if (!VK_APP_ID) {
+                appendLog(
+                    "VK_APP_ID не задан. Укажите ID вашего standalone web-приложения в константе VK_APP_ID.",
+                    { type: "error" },
+                );
+                return;
+            }
+
+            const scope = "wall,groups,offline";
+            const url =
+                "https://oauth.vk.com/authorize" +
+                `?client_id=${encodeURIComponent(VK_APP_ID)}` +
+                "&display=page" +
+                "&redirect_uri=" +
+                encodeURIComponent("https://oauth.vk.com/blank.html") +
+                `&scope=${encodeURIComponent(scope)}` +
+                "&response_type=token" +
+                `&v=${encodeURIComponent(API_VERSION)}`;
+            console.log(url);
+            window.open(url, "_blank", "noopener,noreferrer");
+            appendLog("Открылось окно авторизации ВК. После выдачи прав скопируйте access_token из адресной строки.", {
+                type: "success",
+            });
+        }
+
+        getTokenBtn.addEventListener("click", openTokenPage);
+        startBtn.addEventListener("click", () => {
+            startProcessing().catch((err) => {
+                appendLog(`Необработанная ошибка: ${err}`, { type: "error" });
+                updateTokenStatus();
+                stopBtn.disabled = true;
+                isStopping = false;
+            });
+        });
+        stopBtn.addEventListener("click", stopProcessing);
+        clearLogBtn.addEventListener("click", () => {
+            logEl.innerHTML = "";
+        });
+
+        accessTokenInput.addEventListener("input", updateTokenStatus);
+        document.addEventListener("DOMContentLoaded", updateTokenStatus);
+    </script>
+</body>
+</html>

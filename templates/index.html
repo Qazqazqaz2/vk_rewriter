@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VK Link Rewriter</title>
+  <style>
+    :root {
+      --bg: #0f0f12;
+      --card: #16161b;
+      --input: #1c1c23;
+      --border: #2a2a34;
+      --blue: #2787f5;
+      --blue-dim: rgba(39, 135, 245, 0.15);
+      --text: #e4e4e7;
+      --muted: #a1a1aa;
+      --error: #ef4444;
+      --radius: 12px;
+      --radius-sm: 8px;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--text);
+      font-family: system-ui, -apple-system, sans-serif;
+      font-size: 14px;
+      line-height: 1.5;
+      padding: 2rem;
+    }
+    .wrap { max-width: 700px; margin: 0 auto; }
+    h1 { font-size: 1.5rem; margin: 0 0 0.25rem 0; }
+    .sub { color: var(--muted); font-size: 0.9rem; margin: 0 0 1.5rem 0; }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.25rem 1.5rem;
+      margin-bottom: 1rem;
+    }
+    .field { margin-bottom: 1rem; }
+    .field label { display: block; font-size: 0.8rem; color: var(--muted); margin-bottom: 0.35rem; }
+    input, textarea {
+      width: 100%;
+      background: var(--input);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 0.6rem 0.75rem;
+      color: var(--text);
+      font-size: 0.95rem;
+    }
+    input:focus, textarea:focus {
+      outline: none;
+      border-color: var(--blue);
+      box-shadow: 0 0 0 3px var(--blue-dim);
+    }
+    textarea { resize: vertical; min-height: 100px; font-family: inherit; }
+    input[type="file"] {
+      padding: 0.5rem;
+      font-size: 0.9rem;
+      cursor: pointer;
+    }
+    .file-hint { font-size: 0.75rem; color: var(--muted); margin-top: 0.25rem; }
+    .err {
+      background: rgba(239, 68, 68, 0.12);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      color: var(--error);
+      padding: 0.5rem 0.75rem;
+      border-radius: var(--radius-sm);
+      margin-bottom: 1rem;
+      font-size: 0.9rem;
+    }
+    .btns { display: flex; gap: 0.75rem; margin-top: 0.5rem; }
+    button {
+      padding: 0.6rem 1.25rem;
+      border-radius: var(--radius-sm);
+      font-weight: 500;
+      font-size: 0.95rem;
+      cursor: pointer;
+      border: none;
+      font-family: inherit;
+    }
+    .btn-run {
+      background: var(--blue);
+      color: #fff;
+    }
+    .btn-run:hover:not(:disabled) { filter: brightness(1.1); }
+    .btn-run:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-stop {
+      background: var(--input);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+    .btn-stop:hover:not(:disabled) { background: var(--border); }
+    .btn-stop:disabled { opacity: 0.5; cursor: not-allowed; }
+    .log-title { font-size: 0.8rem; color: var(--muted); margin-bottom: 0.5rem; }
+    .log {
+      background: #0a0a0c;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 1rem;
+      min-height: 200px;
+      max-height: 400px;
+      overflow: auto;
+      font-family: ui-monospace, monospace;
+      font-size: 0.8rem;
+      line-height: 1.6;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .log-empty { color: var(--muted); }
+    .account-bar {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 0.5rem 0.75rem;
+      margin-bottom: 1rem;
+      font-size: 0.9rem;
+      display: none;
+    }
+    .account-bar.visible { display: block; }
+    .account-bar .label { color: var(--muted); margin-right: 0.5rem; }
+    .account-bar .name { font-weight: 500; }
+    .top-links { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1.5rem; }
+    .top-links a { color: var(--blue); text-decoration: none; font-size: 0.9rem; }
+    .top-links a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="top-links">
+      <div>
+        <h1>VK Link Rewriter</h1>
+        <p class="sub">Массовая замена ссылок в постах и комментариях сообществ ВКонтакте</p>
+      </div>
+    </div>
+
+    <div id="accountBar" class="account-bar" aria-live="polite">
+      <span class="label">Аккаунт VK:</span>
+      <span id="accountName" class="name">—</span>
+    </div>
+
+    <div class="card">
+      <form id="form">
+        <div class="field">
+          <label for="token">VK токен *</label>
+          <input id="token" name="token" type="password" placeholder="Токен с правами wall, groups, offline" autocomplete="off">
+        </div>
+        <div class="field">
+          <label for="old">Старая ссылка (что искать)</label>
+          <input id="old" name="old_link" type="text" placeholder="https://...">
+        </div>
+        <div class="field">
+          <label for="new">Новая ссылка (на что заменить)</label>
+          <input id="new" name="new_link" type="text" placeholder="https://...">
+        </div>
+        <div class="field">
+          <label for="communities">Ссылки или ID сообществ (по одной в строке)</label>
+          <textarea id="communities" name="communities" placeholder="https://vk.com/public123&#10;https://vk.com/club123"></textarea>
+          <div class="file-hint">Или загрузите .txt файл — по одной ссылке или ID в строке</div>
+          <input type="file" id="fileCommunities" accept=".txt,text/plain" style="margin-top: 0.5rem;">
+        </div>
+        <div class="field">
+          <label for="maxPostAge">Макс. возраст поста (дней)</label>
+          <input id="maxPostAge" name="max_post_age_days" type="number" min="1" step="1" placeholder="без ограничения">
+          <div class="file-hint">Если пост старше указанного срока — паблик считается обработанным, переход к следующему</div>
+        </div>
+        <div id="err" class="err" style="display:none;"></div>
+        <div class="btns">
+          <button type="submit" class="btn-run" id="btnRun">Запустить</button>
+          <button type="button" class="btn-stop" id="btnStop" disabled>Остановить</button>
+        </div>
+      </form>
+    </div>
+
+    <div class="card">
+      <div class="log-title">Лог</div>
+      <div id="log" class="log log-empty">Лог появится после запуска…</div>
+    </div>
+  </div>
+
+  <script>
+    // Подключаем VK ID Captcha SDK loader (см. https://dev.vk.com/ru/vkcaptcha/web/autointegration)
+    const vkCaptchaLoaderSrc = "https://static.vk.ru/captchaSDK/loader/1/umd/index.js";
+    (function loadVkCaptchaSDK() {
+      const s = document.createElement('script');
+      s.src = vkCaptchaLoaderSrc;
+      s.async = true;
+      document.head.appendChild(s);
+    })();
+    const form = document.getElementById('form');
+    const errEl = document.getElementById('err');
+    const logEl = document.getElementById('log');
+    const btnRun = document.getElementById('btnRun');
+    const btnStop = document.getElementById('btnStop');
+    const tokenInput = document.getElementById('token');
+    const fileCommunitiesInput = document.getElementById('fileCommunities');
+    let logSource = null;
+    let manualCaptchaInProgress = false;
+
+    const TOKEN_KEY = 'vk_rewriter_token';
+    const TOKEN_TTL_MS = 10 * 24 * 60 * 60 * 1000; // 10 дней
+
+    function loadToken() {
+      try {
+        const raw = localStorage.getItem(TOKEN_KEY);
+        if (!raw) return;
+        const data = JSON.parse(raw);
+        if (data.value && data.lastUsed && (Date.now() - data.lastUsed < TOKEN_TTL_MS))
+          tokenInput.value = data.value;
+        else if (data.lastUsed && (Date.now() - data.lastUsed >= TOKEN_TTL_MS))
+          localStorage.removeItem(TOKEN_KEY);
+      } catch (_) {}
+    }
+    function saveToken(token) {
+      if (!token) return;
+      try {
+        localStorage.setItem(TOKEN_KEY, JSON.stringify({ value: token, lastUsed: Date.now() }));
+      } catch (_) {}
+    }
+    loadToken();
+    updateAccountBar();
+
+    function updateAccountBar() {
+      const token = tokenInput.value.trim();
+      const bar = document.getElementById('accountBar');
+      const nameEl = document.getElementById('accountName');
+      if (!token) {
+        bar.classList.remove('visible');
+        nameEl.textContent = '—';
+        return;
+      }
+      fetch('/api/me', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: token })
+      })
+        .then(r => r.ok ? r.json() : Promise.reject(new Error('Ошибка')))
+        .then(data => {
+          nameEl.textContent = (data.display_name || '') + (data.vk_user_id ? ' (id' + data.vk_user_id + ')' : '');
+          bar.classList.add('visible');
+        })
+        .catch(() => {
+          nameEl.textContent = 'Не удалось определить аккаунт';
+          bar.classList.add('visible');
+        });
+    }
+
+    tokenInput.addEventListener('blur', updateAccountBar);
+    tokenInput.addEventListener('input', () => {
+      clearTimeout(tokenInput._accountBarT);
+      tokenInput._accountBarT = setTimeout(updateAccountBar, 500);
+    });
+
+    function showErr(msg) {
+      errEl.textContent = msg || '';
+      errEl.style.display = msg ? 'block' : 'none';
+    }
+
+    function appendLog(text) {
+      if (!text) return;
+      if (logEl.classList.contains('log-empty')) {
+        logEl.classList.remove('log-empty');
+        logEl.textContent = '';
+      }
+      logEl.textContent += text;
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    async function handleManualCaptcha(redirectUri) {
+      if (!redirectUri || manualCaptchaInProgress) return;
+      manualCaptchaInProgress = true;
+      appendLog(`\n🔐 Требуется ручное решение VKCaptcha.\n   Откроется виджет VK ID Captcha для ${redirectUri}\n`);
+      try {
+        const vkid = await window.vkidCaptcha;
+        const { checkCaptchaError } = vkid;
+        const responseError = { error_code: 14, redirect_uri: redirectUri };
+        const { captchaType, captchaWidget } = checkCaptchaError({
+          responseHeaders: new Headers(),
+          url: redirectUri,
+          responseError,
+          withWidget: true,
+        });
+        if (!captchaType || captchaType === 'unknown' || !captchaWidget) {
+          appendLog('\n⚠️ Не удалось инициализировать VK ID Captcha виджет.\n');
+          return;
+        }
+        try {
+          const successToken = await captchaWidget.show({
+            container: document.body,
+            view: 'popup',
+          });
+          appendLog('\n🔓 Капча решена пользователем, отправляем success_token на сервер…\n');
+          await fetch('/api/captcha-success', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ success_token: successToken })
+          });
+          appendLog('✅ success_token передан, задача продолжит выполнение автоматически.\n');
+        } catch (err) {
+          if (err === 'close') {
+            appendLog('\n⚠️ Виджет VK ID Captcha был закрыт пользователем без решения.\n');
+          } else {
+            appendLog(`\n⚠️ Ошибка VK ID Captcha: ${err}\n`);
+          }
+        }
+      } catch (e) {
+        appendLog(`\n⚠️ Не удалось загрузить VK ID Captcha SDK: ${e && e.message ? e.message : e}\n`);
+      } finally {
+        manualCaptchaInProgress = false;
+      }
+    }
+
+    // На случай, если SSE-строка не дошла/потерялась — периодически спрашиваем backend,
+    // не ждём ли мы сейчас ручное решение VKCaptcha.
+    setInterval(async () => {
+      try {
+        const res = await fetch('/api/captcha', { method: 'GET' });
+        if (!res.ok) return;
+        const data = await res.json().catch(() => ({}));
+        if (data && data.has_captcha && data.redirect_uri) {
+          handleManualCaptcha(String(data.redirect_uri));
+        }
+      } catch (_) {}
+    }, 2500);
+
+    function parseCommunitiesText(text) {
+      return (text || '').split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+    }
+
+    function readFileAsText(file) {
+      return new Promise((resolve, reject) => {
+        const r = new FileReader();
+        r.onload = () => resolve(r.result || '');
+        r.onerror = () => reject(new Error('Не удалось прочитать файл'));
+        r.readAsText(file, 'UTF-8');
+      });
+    }
+
+    fileCommunitiesInput.addEventListener('change', (e) => {
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
+      readFileAsText(file).then(text => {
+        document.getElementById('communities').value = text;
+      }).catch(() => {});
+    });
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const token = tokenInput.value.trim();
+      const oldLink = document.getElementById('old').value.trim();
+      const newLink = document.getElementById('new').value.trim();
+      let communities = parseCommunitiesText(document.getElementById('communities').value);
+      const maxPostAgeRaw = document.getElementById('maxPostAge').value.trim();
+      const maxPostAgeDays = maxPostAgeRaw ? parseInt(maxPostAgeRaw, 10) : null;
+
+      if (communities.length === 0 && fileCommunitiesInput.files && fileCommunitiesInput.files[0]) {
+        try {
+          const text = await readFileAsText(fileCommunitiesInput.files[0]);
+          communities = parseCommunitiesText(text);
+          if (communities.length) document.getElementById('communities').value = text;
+        } catch (_) {}
+      }
+
+      if (!token) { showErr('Укажите VK токен.'); return; }
+      if (!oldLink || !newLink) { showErr('Укажите старую и новую ссылки.'); return; }
+      if (!communities.length) { showErr('Укажите хотя бы одно сообщество или загрузите .txt файл.'); return; }
+
+      saveToken(token);
+
+      showErr('');
+      logEl.classList.remove('log-empty');
+      logEl.textContent = 'Запуск…\n\n';
+      btnRun.disabled = true;
+      btnStop.disabled = false;
+
+      // если был предыдущий поток логов — закрываем
+      if (logSource) {
+        try { logSource.close(); } catch (_) {}
+        logSource = null;
+      }
+
+      try {
+        const res = await fetch('/api/run', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            token,
+            old_link: oldLink,
+            new_link: newLink,
+            communities,
+            max_post_age_days: maxPostAgeDays && maxPostAgeDays >= 1 ? maxPostAgeDays : null
+          })
+        });
+
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.error || 'Ошибка ' + res.status);
+        }
+
+        // запускаем отдельный SSE-поток для логов
+        logSource = new EventSource('/api/log-stream');
+        logSource.onmessage = (event) => {
+          if (!event.data) return;
+          appendLog(event.data + '\n');
+          // Если backend сигнализирует о необходимости ручного решения VKCaptcha,
+          // извлекаем redirect_uri и запускаем VK ID Captcha SDK.
+          if (event.data.startsWith('VKCAPTCHA_MANUAL_REDIRECT_URI:')) {
+            const uri = event.data.replace('VKCAPTCHA_MANUAL_REDIRECT_URI:', '').trim();
+            if (uri) {
+              handleManualCaptcha(uri);
+            }
+          }
+        };
+        logSource.onerror = () => {
+          if (logSource) {
+            try { logSource.close(); } catch (_) {}
+            logSource = null;
+          }
+        };
+      } catch (e) {
+        showErr(e.message || 'Ошибка запроса');
+        appendLog('\n' + (e.message || 'Ошибка') + '\n');
+      } finally {
+        btnRun.disabled = false;
+        btnStop.disabled = true;
+      }
+    });
+
+    btnStop.addEventListener('click', () => {
+      if (logSource) {
+        try { logSource.close(); } catch (_) {}
+        logSource = null;
+      }
+      fetch('/api/stop', { method: 'POST' }).catch(() => {});
+    });
+  </script>
+</body>
+</html>

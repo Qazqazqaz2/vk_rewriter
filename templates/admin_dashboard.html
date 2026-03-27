@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Админ-панель — VK Link Rewriter</title>
+  <style>
+    :root {
+      --bg: #0f0f12;
+      --card: #16161b;
+      --input: #1c1c23;
+      --border: #2a2a34;
+      --blue: #2787f5;
+      --blue-dim: rgba(39, 135, 245, 0.15);
+      --text: #e4e4e7;
+      --muted: #a1a1aa;
+      --error: #ef4444;
+      --radius: 12px;
+      --radius-sm: 8px;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--text);
+      font-family: system-ui, -apple-system, sans-serif;
+      font-size: 14px;
+      line-height: 1.5;
+      padding: 2rem;
+    }
+    .wrap { max-width: 1100px; margin: 0 auto; }
+    .top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 0.75rem; }
+    h1 { font-size: 1.5rem; margin: 0; }
+    .sub { color: var(--muted); font-size: 0.9rem; margin: 0.25rem 0 0 0; }
+    a { color: var(--blue); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.25rem 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+    .card h2 { font-size: 1.1rem; margin: 0 0 1rem 0; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+    th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--border); }
+    th { color: var(--muted); font-weight: 500; }
+    tr:hover td { background: rgba(255,255,255,0.02); }
+    .mono { font-family: ui-monospace, monospace; font-size: 0.85em; }
+    .form-row { display: flex; gap: 0.5rem; align-items: flex-end; flex-wrap: wrap; margin-bottom: 1rem; }
+    .form-row .field { margin-bottom: 0; flex: 1; min-width: 120px; }
+    .form-row label { display: block; font-size: 0.8rem; color: var(--muted); margin-bottom: 0.25rem; }
+    input {
+      width: 100%;
+      background: var(--input);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 0.5rem 0.75rem;
+      color: var(--text);
+      font-size: 0.95rem;
+    }
+    button {
+      padding: 0.5rem 1rem;
+      border-radius: var(--radius-sm);
+      font-weight: 500;
+      font-size: 0.9rem;
+      cursor: pointer;
+      border: none;
+      font-family: inherit;
+      white-space: nowrap;
+    }
+    .btn-primary { background: var(--blue); color: #fff; }
+    .btn-primary:hover:not(:disabled) { filter: brightness(1.1); }
+    .btn-danger { background: rgba(239, 68, 68, 0.2); color: var(--error); }
+    .btn-danger:hover:not(:disabled) { background: rgba(239, 68, 68, 0.35); }
+    .btn-ghost { background: var(--input); color: var(--text); border: 1px solid var(--border); }
+    .btn-ghost:hover { background: var(--border); }
+    .msg { padding: 0.5rem 0.75rem; border-radius: var(--radius-sm); margin-bottom: 0.5rem; font-size: 0.9rem; }
+    .msg.ok { background: rgba(34, 197, 94, 0.15); color: #22c55e; }
+    .msg.err { background: rgba(239, 68, 68, 0.15); color: var(--error); }
+    .scroll-box { max-height: 400px; overflow: auto; }
+    .muted { color: var(--muted); }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="top">
+      <div>
+        <h1>Админ-панель</h1>
+        <p class="sub">Аудит действий VK-аккаунтов и блокировки</p>
+      </div>
+      <a href="{{ url_for('index') }}">← На главную</a>
+      <form method="post" action="{{ url_for('admin_logout') }}" style="margin:0;">
+        <button type="submit" class="btn-ghost">Выйти</button>
+      </form>
+    </div>
+
+    <div class="card">
+      <h2>Сменить пароль админ-панели</h2>
+      <div id="passwordMsg"></div>
+      <div class="form-row">
+        <div class="field" style="min-width: 160px;">
+          <label for="currentPassword">Текущий пароль</label>
+          <input id="currentPassword" type="password" autocomplete="current-password">
+        </div>
+        <div class="field" style="min-width: 160px;">
+          <label for="newPassword">Новый пароль</label>
+          <input id="newPassword" type="password" autocomplete="new-password">
+        </div>
+        <button type="button" class="btn-primary" id="btnChangePassword">Сменить пароль</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>API ключ ruCaptcha</h2>
+      <div id="captchaKeyMsg"></div>
+      <div class="form-row">
+        <div class="field" style="min-width: 220px;">
+          <label for="captchaKey">API ключ ruCaptcha</label>
+          <input id="captchaKey" type="password" autocomplete="off" placeholder="ruCaptcha API key">
+        </div>
+        <button type="button" class="btn-primary" id="btnSaveCaptchaKey">Сохранить ключ</button>
+      </div>
+      <div class="muted" id="captchaKeyStatus">Статус ключа не загружен…</div>
+    </div>
+
+    <div class="card">
+      <h2>Прокси для ruCaptcha VKCaptcha</h2>
+      <div class="muted">VKCaptcha решается только через прокси. Формат URI: <span class="mono">login:password@ip:port</span> или <span class="mono">ip:port</span>. При ERROR_CAPTCHA_UNSOLVABLE используйте резидентный/мобильный прокси с IP из РФ/СНГ — VK часто блокирует датацентровые IP.</div>
+      <div id="captchaProxyMsg" style="margin-top:0.5rem;"></div>
+      <div class="form-row" style="margin-top:0.5rem;">
+        <div class="field" style="min-width: 120px; max-width: 180px;">
+          <label for="captchaProxyType">Тип</label>
+          <select id="captchaProxyType" style="width:100%; background: var(--input); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 0.5rem 0.75rem; color: var(--text); font-size: 0.95rem;">
+            <option value="http">HTTP</option>
+            <option value="https">HTTPS</option>
+            <option value="socks5">SOCKS5</option>
+          </select>
+        </div>
+        <div class="field" style="min-width: 240px; flex: 2;">
+          <label for="captchaProxyUri">Proxy URI</label>
+          <input id="captchaProxyUri" type="password" autocomplete="off" placeholder="login:password@ip:port или ip:port">
+        </div>
+        <button type="button" class="btn-primary" id="btnSaveCaptchaProxy">Сохранить прокси</button>
+      </div>
+      <div class="muted" id="captchaProxyStatus">Статус прокси не загружен…</div>
+    </div>
+
+    <div class="card">
+      <h2>Заблокировать VK-аккаунт</h2>
+      <div id="blockMsg"></div>
+      <div class="form-row">
+        <div class="field">
+          <label for="blockId">VK User ID (число)</label>
+          <input id="blockId" type="number" placeholder="123456789" min="1" step="1">
+        </div>
+        <div class="field" style="flex:2; min-width: 180px;">
+          <label for="blockReason">Причина (необязательно)</label>
+          <input id="blockReason" type="text" placeholder="Нарушение правил">
+        </div>
+        <button type="button" class="btn-primary" id="btnBlock">Заблокировать</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Заблокированные аккаунты</h2>
+      <div id="blockedMsg"></div>
+      <div class="scroll-box">
+        <table>
+          <thead>
+            <tr><th>VK User ID</th><th>Причина</th><th>Дата</th><th></th></tr>
+          </thead>
+          <tbody id="blockedBody">
+            <tr><td colspan="4" class="muted">Загрузка…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Аудит посещений админ-панели (по IP)</h2>
+      <div class="scroll-box">
+        <table>
+          <thead>
+            <tr><th>Дата</th><th>IP</th><th>Действие</th></tr>
+          </thead>
+          <tbody id="visitsBody">
+            <tr><td colspan="3" class="muted">Загрузка…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Аудит действий VK (замена ссылок)</h2>
+      <div class="scroll-box">
+        <table>
+          <thead>
+            <tr><th>Дата</th><th>VK ID</th><th>Имя</th><th>Действие</th><th>Детали</th><th>IP</th></tr>
+          </thead>
+          <tbody id="auditBody">
+            <tr><td colspan="6" class="muted">Загрузка…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const ADMIN_BASE = "{{ admin_base }}";
+    function showMsg(el, text, isErr) {
+      el.innerHTML = text ? '<div class="msg ' + (isErr ? 'err' : 'ok') + '">' + text + '</div>' : '';
+    }
+
+    async function api(path, opts = {}) {
+      const r = await fetch(ADMIN_BASE + path, { credentials: 'same-origin', ...opts });
+      const data = r.ok ? await r.json().catch(() => ({})) : await r.json().catch(() => ({ error: 'Ошибка ' + r.status }));
+      if (!r.ok) throw new Error(data.error || r.status);
+      return data;
+    }
+
+    async function loadBlocked() {
+      const data = await api('/api/blocked');
+      const tbody = document.getElementById('blockedBody');
+      if (!data.items || !data.items.length) {
+        tbody.innerHTML = '<tr><td colspan="4" class="muted">Нет заблокированных</td></tr>';
+        return;
+      }
+      tbody.innerHTML = data.items.map(b => `
+        <tr>
+          <td class="mono">${b.vk_user_id}</td>
+          <td>${escapeHtml(b.reason || '—')}</td>
+          <td class="mono">${escapeHtml(b.blocked_at)}</td>
+          <td><button type="button" class="btn-danger" data-id="${b.vk_user_id}">Разблокировать</button></td>
+        </tr>
+      `).join('');
+      tbody.querySelectorAll('button[data-id]').forEach(btn => {
+        btn.addEventListener('click', () => unblock(parseInt(btn.dataset.id, 10)));
+      });
+    }
+
+    function escapeHtml(s) {
+      const div = document.createElement('div');
+      div.textContent = s;
+      return div.innerHTML;
+    }
+
+    async function loadAudit() {
+      const data = await api('/api/audit?limit=200');
+      const tbody = document.getElementById('auditBody');
+      if (!data.items || !data.items.length) {
+        tbody.innerHTML = '<tr><td colspan="6" class="muted">Нет записей</td></tr>';
+        return;
+      }
+      tbody.innerHTML = data.items.map(a => `
+        <tr>
+          <td class="mono">${escapeHtml(a.created_at)}</td>
+          <td class="mono">${a.vk_user_id}</td>
+          <td>${escapeHtml(a.vk_name)}</td>
+          <td>${escapeHtml(a.action)}</td>
+          <td class="mono" style="max-width:220px;overflow:hidden;text-overflow:ellipsis;" title="${escapeHtml(a.details || '')}">${escapeHtml((a.details || '').slice(0, 60))}${(a.details || '').length > 60 ? '…' : ''}</td>
+          <td class="mono">${escapeHtml(a.ip || '—')}</td>
+        </tr>
+      `).join('');
+    }
+
+    document.getElementById('btnBlock').addEventListener('click', async () => {
+      const id = parseInt(document.getElementById('blockId').value, 10);
+      const msgEl = document.getElementById('blockMsg');
+      if (!id || id < 1) { showMsg(msgEl, 'Укажите корректный VK User ID', true); return; }
+      const reason = document.getElementById('blockReason').value.trim();
+      try {
+        await api('/api/block', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ vk_user_id: id, reason: reason || undefined }) });
+        showMsg(msgEl, 'Аккаунт заблокирован', false);
+        document.getElementById('blockId').value = '';
+        document.getElementById('blockReason').value = '';
+        loadBlocked();
+      } catch (e) {
+        showMsg(msgEl, e.message, true);
+      }
+    });
+
+    async function unblock(vkUserId) {
+      const msgEl = document.getElementById('blockedMsg');
+      try {
+        await api('/api/unblock', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ vk_user_id: vkUserId }) });
+        showMsg(msgEl, 'Аккаунт разблокирован', false);
+        loadBlocked();
+      } catch (e) {
+        showMsg(msgEl, e.message, true);
+      }
+    }
+
+    async function loadVisits() {
+      const data = await api('/api/visits?limit=200');
+      const tbody = document.getElementById('visitsBody');
+      if (!data.items || !data.items.length) {
+        tbody.innerHTML = '<tr><td colspan="3" class="muted">Нет записей</td></tr>';
+        return;
+      }
+      const actionLabels = { page_index: 'Вход на /', page_login: 'Страница входа', page_dashboard: 'Дашборд', login_ok: 'Вход успешен', login_fail: 'Неудачный вход', logout: 'Выход' };
+      tbody.innerHTML = data.items.map(v => `
+        <tr>
+          <td class="mono">${escapeHtml(v.created_at)}</td>
+          <td class="mono">${escapeHtml(v.ip || '—')}</td>
+          <td>${escapeHtml(actionLabels[v.action] || v.action)}</td>
+        </tr>
+      `).join('');
+    }
+
+    async function loadSettings() {
+      try {
+        const data = await api('/api/settings');
+        const statusEl = document.getElementById('captchaKeyStatus');
+        const proxyStatusEl = document.getElementById('captchaProxyStatus');
+        if (data.has_captcha_key) {
+          statusEl.textContent = 'Ключ ruCaptcha задан.';
+        } else {
+          statusEl.textContent = 'Ключ ruCaptcha не задан.';
+        }
+        if (proxyStatusEl) {
+          if (data.has_captcha_proxy) {
+            proxyStatusEl.textContent = 'Прокси задан (тип: ' + (data.captcha_proxy_type || '—') + ').';
+          } else {
+            proxyStatusEl.textContent = 'Прокси не задан. VKCaptcha не будет решаться автоматически.';
+          }
+        }
+        const typeEl = document.getElementById('captchaProxyType');
+        if (typeEl && data.captcha_proxy_type) typeEl.value = data.captcha_proxy_type;
+      } catch (e) {}
+    }
+
+    document.getElementById('btnChangePassword').addEventListener('click', async () => {
+      const msgEl = document.getElementById('passwordMsg');
+      const current = document.getElementById('currentPassword').value;
+      const newPass = document.getElementById('newPassword').value;
+      if (!current) { showMsg(msgEl, 'Введите текущий пароль', true); return; }
+      if (!newPass || newPass.length < 4) { showMsg(msgEl, 'Новый пароль не менее 4 символов', true); return; }
+      try {
+        await api('/api/change-password', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ current_password: current, new_password: newPass }) });
+        showMsg(msgEl, 'Пароль изменён', false);
+        document.getElementById('currentPassword').value = '';
+        document.getElementById('newPassword').value = '';
+      } catch (e) {
+        showMsg(msgEl, e.message, true);
+      }
+    });
+
+    document.getElementById('btnSaveCaptchaKey').addEventListener('click', async () => {
+      const msgEl = document.getElementById('captchaKeyMsg');
+      const key = document.getElementById('captchaKey').value.trim();
+      try {
+        await api('/api/captcha-key', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ api_key: key || null })
+        });
+        showMsg(msgEl, key ? 'Ключ сохранён' : 'Ключ удалён', false);
+        document.getElementById('captchaKey').value = '';
+        loadSettings();
+      } catch (e) {
+        showMsg(msgEl, e.message, true);
+      }
+    });
+
+    document.getElementById('btnSaveCaptchaProxy').addEventListener('click', async () => {
+      const msgEl = document.getElementById('captchaProxyMsg');
+      const proxyType = (document.getElementById('captchaProxyType').value || '').trim();
+      const proxyUri = (document.getElementById('captchaProxyUri').value || '').trim();
+      try {
+        await api('/api/captcha-proxy', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ proxy_type: proxyType || null, proxy_uri: proxyUri || null })
+        });
+        showMsg(msgEl, proxyUri ? 'Прокси сохранён' : 'Прокси удалён', false);
+        document.getElementById('captchaProxyUri').value = '';
+        loadSettings();
+      } catch (e) {
+        showMsg(msgEl, e.message, true);
+      }
+    });
+
+    loadBlocked();
+    loadAudit();
+    loadVisits();
+    loadSettings();
+  </script>
+</body>
+</html>
