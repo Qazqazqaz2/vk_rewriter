@@ -31,6 +31,9 @@ vk = None
 
 request_times = deque()
 
+# Последняя ошибка при попытке определить текущего пользователя по токену.
+_last_vk_user_error: Optional[str] = None
+
 # Единый User-Agent для VK API и ruCaptcha VKCaptchaTask.
 # Важно: mismatch UA может снижать шанс успешного прохождения not_robot_captcha.
 VK_CAPTCHA_USER_AGENTS = [
@@ -169,12 +172,19 @@ def _build_http_session(
 # ---------------------------------------------------------------------------
 #  Инициализация VK API
 # ---------------------------------------------------------------------------
-def init_vk_api(token: Optional[str] = None, ignore_env_token: bool = False) -> None:
+def init_vk_api(
+    token: Optional[str] = None,
+    ignore_env_token: bool = False,
+    use_rucaptcha_proxy: bool = True,
+) -> None:
     global VK_TOKEN, vk_session, vk
 
     token_arg = (token or "").strip() or None
     http_session = _build_http_session()
-    if (os.getenv("VK_USE_RUCAPTCHA_PROXY") or "1").strip().lower() not in ("0", "false", "no"):
+    if (
+        use_rucaptcha_proxy
+        and (os.getenv("VK_USE_RUCAPTCHA_PROXY") or "1").strip().lower() not in ("0", "false", "no")
+    ):
         proxy_for_vk = _get_rucaptcha_proxy()
         if proxy_for_vk:
             proxy_url = _proxy_to_url(proxy_for_vk)
@@ -211,19 +221,57 @@ def get_current_vk_user() -> Optional[dict]:
     """Возвращает данные текущего пользователя VK (владельца токена)."""
     if vk_session is None:
         return None
+
+    global _last_vk_user_error
+    _last_vk_user_error = None
+
+    # На практике иногда `users.get` может вернуть пусто/ошибку
+    # (например, из-за просроченного токена или отсутствия прав),
+    # поэтому делаем fallback на другой метод и логируем исключения.
     try:
-        users = vk_session.method("users.get", {"fields": "screen_name"})
+        users = vk_session.method(
+            "users.get",
+            {
+                "v": "5.131",
+                "fields": "id,first_name,last_name,screen_name",
+            },
+        )
         if users and len(users) > 0:
-            u = users[0]
+            u = users[0] or {}
             return {
                 "id": u.get("id"),
-                "first_name": u.get("first_name", ""),
-                "last_name": u.get("last_name", ""),
-                "screen_name": u.get("screen_name", ""),
+                "first_name": u.get("first_name", "") or "",
+                "last_name": u.get("last_name", "") or "",
+                "screen_name": u.get("screen_name", "") or "",
             }
-    except Exception:
-        pass
+        _last_vk_user_error = "users.get вернул пустой ответ"
+    except Exception as e:
+        _last_vk_user_error = str(e)
+        print(f"⚠️ get_current_vk_user: users.get ошибка: {e}")
+
+    try:
+        info = vk_session.method("account.getProfileInfo", {"v": "5.131"})
+        if isinstance(info, dict):
+            # На некоторых версиях полей может не быть — подставляем пустые строки.
+            uid = info.get("id") or info.get("user_id") or info.get("uid")
+            if uid:
+                return {
+                    "id": uid,
+                    "first_name": info.get("first_name", "") or "",
+                    "last_name": info.get("last_name", "") or "",
+                    "screen_name": info.get("screen_name", "") or "",
+                }
+        _last_vk_user_error = "account.getProfileInfo вернул пустой ответ"
+    except Exception as e:
+        _last_vk_user_error = str(e)
+        print(f"⚠️ get_current_vk_user: account.getProfileInfo ошибка: {e}")
+
     return None
+
+
+def get_last_vk_user_error() -> Optional[str]:
+    """Возвращает текст последней ошибки при определении текущего VK-пользователя."""
+    return _last_vk_user_error
 
 
 # ---------------------------------------------------------------------------
@@ -409,13 +457,14 @@ def _solve_vkcaptcha_via_rucaptcha(redirect_uri: str) -> Optional[str]:
     if not redirect_uri:
         return None
 
-    primary_proxy = _get_rucaptcha_proxy()
-    pool = _get_rucaptcha_proxy_pool()
-    if primary_proxy:
-        all_proxies = [primary_proxy] + pool
-    else:
-        all_proxies = pool
-    if not all_proxies:
+    # Для VKCaptchaTask важно: работники должны воспроизвести запрос к капче
+    # в том же окружении (минимум — тот же proxy и userAgent).
+    # Поэтому фиксируем proxy и userAgent и НЕ ротируем их на ретраях.
+    proxy = _get_rucaptcha_proxy()
+    if not proxy:
+        pool = _get_rucaptcha_proxy_pool()
+        proxy = pool[0] if pool else None
+    if not proxy:
         print(
             "⚠️ ruCaptcha VKCaptchaTask: не задан прокси. "
             "Укажите в админке или в env (RUCAPTCHA_PROXY_ADDRESS, RUCAPTCHA_PROXY_PORT)."
@@ -423,7 +472,12 @@ def _solve_vkcaptcha_via_rucaptcha(redirect_uri: str) -> Optional[str]:
         return None
 
     print(f"🔎 ruCaptcha VKCaptchaTask: redirect_uri: {redirect_uri[:80]}…")
-    print(f"🔎 ruCaptcha VKCaptchaTask: доступно прокси: {len(all_proxies)}")
+    print(
+        "🔎 ruCaptcha VKCaptchaTask: proxy fixed: "
+        f"{proxy['type']}://{proxy['address']}:{proxy['port']}"
+    )
+    ua = _get_vk_captcha_user_agent(0)
+    print(f"🔎 ruCaptcha VKCaptchaTask: userAgent fixed: {ua[:72]}…")
 
     max_retries = 10
     try:
@@ -433,8 +487,6 @@ def _solve_vkcaptcha_via_rucaptcha(redirect_uri: str) -> Optional[str]:
 
     unsolvable_streak = 0
     for attempt in range(max_retries):
-        proxy = all_proxies[attempt % len(all_proxies)]
-        ua = _get_vk_captcha_user_agent(attempt)
         task = {
             "type": "VKCaptchaTask",
             "redirectUri": redirect_uri,
@@ -456,12 +508,7 @@ def _solve_vkcaptcha_via_rucaptcha(redirect_uri: str) -> Optional[str]:
             print(f"🔐 ruCaptcha: повторная попытка {attempt + 1}/{max_retries} (ERROR_CAPTCHA_UNSOLVABLE)…")
         else:
             print("🔐 ruCaptcha: создаём VKCaptchaTask…")
-        print(f"🔎 ruCaptcha VKCaptchaTask: userAgent[{attempt + 1}]={ua[:72]}…")
-        print(
-            "🔎 ruCaptcha VKCaptchaTask: proxy[{}]={}://{}:{}".format(
-                attempt + 1, proxy["type"], proxy["address"], proxy["port"]
-            )
-        )
+        # UA/proxy фиксированы, поэтому логируем только факт ретрая.
 
         token, err_code = _solve_vkcaptcha_single_task(
             api_key, task_payload, max_wait=120, poll_interval=10
@@ -474,7 +521,7 @@ def _solve_vkcaptcha_via_rucaptcha(redirect_uri: str) -> Optional[str]:
                 "⚠️ ruCaptcha: работники не смогли решить капчу. "
                 "Проверьте качество прокси (режим РФ/СНГ повышает шансы)."
             )
-            if len(all_proxies) == 1 and unsolvable_streak >= 3:
+            if unsolvable_streak >= 3:
                 print(
                     "⏭ Прерываем авто-попытки ruCaptcha раньше: один и тот же прокси дал "
                     "несколько ERROR_CAPTCHA_UNSOLVABLE подряд. Переходим к ручному решению."

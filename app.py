@@ -98,7 +98,7 @@ def api_me():
     if not token:
         return {"error": "Укажите VK токен"}, 400
     try:
-        core.init_vk_api(token=token, ignore_env_token=True)
+        core.init_vk_api(token=token, ignore_env_token=True, use_rucaptcha_proxy=False)
         user = core.get_current_vk_user()
     except Exception as e:
         return {"error": str(e)}, 400
@@ -144,12 +144,20 @@ def api_run():
 
     # Определяем VK-аккаунт, проверяем блокировку, пишем в аудит
     try:
-        core.init_vk_api(token=token, ignore_env_token=True)
+        core.init_vk_api(token=token, ignore_env_token=True, use_rucaptcha_proxy=False)
         vk_user = core.get_current_vk_user()
     except Exception as e:
         return {"error": f"Ошибка инициализации VK API: {e}"}, 400
     if not vk_user:
-        return {"error": "Не удалось определить пользователя VK по токену"}, 400
+        try:
+            details = core.get_last_vk_user_error()
+        except Exception:
+            details = None
+        print(f"⚠️ /api/run: vk_user не определён. details={details!r}")
+        payload = {"error": "Не удалось определить пользователя VK по токену"}
+        if details:
+            payload["details"] = details
+        return payload, 400
 
     vk_user_id = vk_user["id"]
     vk_name = f"{vk_user['first_name']} {vk_user['last_name']}".strip() or f"id{vk_user_id}"
