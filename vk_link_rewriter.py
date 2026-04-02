@@ -14,7 +14,7 @@ from vk_api.vk_api import DEFAULT_USERAGENT
 from dotenv import load_dotenv
 import requests
 from requests.adapters import HTTPAdapter
-
+from urllib.parse import parse_qs, urlencode
 try:
     from urllib3.util.retry import Retry
 except Exception:
@@ -61,17 +61,44 @@ def _get_vk_captcha_user_agent(attempt: int = 0) -> str:
     return VK_CAPTCHA_USER_AGENTS[attempt % len(VK_CAPTCHA_USER_AGENTS)]
 
 
+from urllib.parse import urlparse  # уже должен быть импортирован, но на всякий случай
+
 def _proxy_to_url(proxy: dict) -> str:
+    """ФИНАЛЬНАЯ ВЕРСИЯ: поддержка https + 100% удаление дублей http://"""
+    if not proxy or not proxy.get("address"):
+        return None
+
+    # Тип прокси — берём из настроек (теперь можно https)
     ptype = (proxy.get("type") or "http").strip().lower()
     if ptype not in ("http", "https", "socks5"):
-        ptype = "http"
+        ptype = "https"   # по умолчанию теперь https, как ты хочешь
+
+    # === АГРЕССИВНАЯ ОЧИСТКА ADDRESS ===
+    address = str(proxy.get("address")).strip()
+
+    # Если в address уже есть полный URL (http:// или https://)
+    if "://" in address:
+        # Берём только хост (отрезаем scheme)
+        address = address.split("://")[-1]
+
+    # Убираем порт, если он случайно прилип к адресу
+    if ":" in address:
+        address = address.split(":")[0]
+
+    # Убираем лишние слэши и пробелы
+    address = address.split("/")[0].strip()
+
     login = (proxy.get("login") or "").strip()
     password = (proxy.get("password") or "").strip()
+
     auth = ""
     if login:
-        auth = login if not password else f"{login}:{password}"
-        auth += "@"
-    return f"{ptype}://{auth}{proxy.get('address')}:{proxy.get('port')}"
+        auth = f"{login}:{password}@" if password else f"{login}@"
+
+    proxy_url = f"{ptype}://{auth}{address}:{proxy.get('port')}"
+
+    print(f"🔧 Сформирован прокси для VK: {proxy_url}  (тип: {ptype})")
+    return proxy_url
 
 # ---------------------------------------------------------------------------
 #  Перехват redirect_uri / remixstlid из JSON-ответа VK
@@ -203,7 +230,7 @@ def init_vk_api(
 
     vk_session = vk_api.VkApi(token=VK_TOKEN, session=http_session)
 
-    _http = getattr(vk_session, "http", None)
+    _http = getattr(vk_session, "https", None)
     if _http is not None:
         hooks_list = _http.hooks.get("response")
         if hooks_list is None:
@@ -278,27 +305,41 @@ def get_last_vk_user_error() -> Optional[str]:
 #  Нормализация redirect_uri VK (*.vk.ru → *.vk.com)
 # ---------------------------------------------------------------------------
 def _normalize_vk_redirect_uri(uri: str) -> str:
+    """Полная очистка redirectUri: убирает origin=127.0.0.1 + нормализует vk.ru → vk.com"""
     try:
         uri = (uri or "").strip()
         if not uri:
             return uri
+
         parsed = urlparse(uri)
+        query_params = parse_qs(parsed.query)
+
+        # === ГЛАВНОЕ ИСПРАВЛЕНИЕ ===
+        if "origin" in query_params:
+            old_origin = query_params["origin"][0]
+            print(f"🧹 УДАЛЯЕМ локальный origin из redirectUri: {old_origin}")
+            query_params.pop("origin", None)
+
+        # Добавляем нормальный origin (RuCaptcha это принимает)
+        query_params["origin"] = ["https://vk.com"]
+
+        # Нормализация домена
         host = parsed.netloc or ""
-        if not host:
-            return uri
         new_host = host
         if host.endswith(".vk.ru"):
-            new_host = host[: -len(".vk.ru")] + ".vk.com"
-        elif host == "vk.ru":
-            new_host = "vk.com"
-        elif host == "id.vk.ru":
-            new_host = "id.vk.com"
-        if new_host == host:
-            return uri
-        normalized = urlunparse(parsed._replace(netloc=new_host))
-        print(f"🔁 Нормализуем redirect_uri VK: {uri} -> {normalized}")
+            new_host = host.replace(".vk.ru", ".vk.com")
+        elif host in ("vk.ru", "id.vk.ru"):
+            new_host = host.replace("vk.ru", "vk.com")
+
+        new_query = urlencode(query_params, doseq=True)
+        normalized = urlunparse(parsed._replace(netloc=new_host, query=new_query))
+
+        if normalized != uri:
+            print(f"🔁 redirectUri исправлен → {normalized[:160]}...")
         return normalized
-    except Exception:
+
+    except Exception as e:
+        print(f"⚠️ Ошибка нормализации redirectUri: {e}")
         return uri
 
 
@@ -318,9 +359,9 @@ def _get_rucaptcha_proxy() -> Optional[dict]:
         port = int(port_s)
     except ValueError:
         return None
-    ptype = (os.getenv("RUCAPTCHA_PROXY_TYPE") or "http").strip().lower()
+    ptype = (os.getenv("RUCAPTCHA_PROXY_TYPE") or "https").strip().lower()
     if ptype not in ("http", "https", "socks5"):
-        ptype = "http"
+        ptype = "https"
     return {
         "type": ptype,
         "address": addr,
@@ -344,12 +385,12 @@ def _get_rucaptcha_proxy_pool() -> list[dict]:
         if not item:
             continue
         if "://" not in item:
-            item = "http://" + item
+            item = "https://" + item
         try:
             parsed = urlparse(item)
-            ptype = (parsed.scheme or "http").lower()
+            ptype = (parsed.scheme or "https").lower()
             if ptype not in ("http", "https", "socks5"):
-                ptype = "http"
+                ptype = "https"
             if not parsed.hostname or not parsed.port:
                 continue
             result.append(
